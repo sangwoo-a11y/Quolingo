@@ -23,7 +23,7 @@ const fields = ['observation', 'interpretation', 'application'];
 const parts = ['관찰', '해석', '적용'];
 const content = document.querySelector('#content');
 let readingData = {}, mode = 'qt', journalTab = 'qt', openingDayTimer = null, heldButton = null;
-let shareSnapshot=null,shareBusy=false,scriptureRequest=0;
+let shareSnapshot=null,shareBusy=false,scriptureRequest=0,highlightDraft=null;
 let data = {}, legacy = {}, page = 'home', stage = 0, selected = CHAPTERS[0].id;
 let rangeStart = 1, rangeEnd = CHAPTERS[0].verses.length;
 function load(key) {
@@ -247,6 +247,7 @@ function restoreRoute(route) {
   return true;
 }
 function render(target=page,historyMode='auto') {
+  if(highlightDraft&&(target!=='reader'||highlightDraft.id!==selected||highlightDraft.date!==selectedDate||highlightDraft.version!==profile.bibleVersion||highlightDraft.owner!==accountStore.owner))closeVerseRecord();
   const request=++scriptureRequest;
   applyTheme();
   if(target!=='customize')shopPreview=null;
@@ -399,17 +400,42 @@ function saveHighlight(date,key,value) {
   try {accountStore.setItem(READING_KEY,JSON.stringify(next));readingData=next;return true;}
   catch {toast('말씀 기록을 저장하지 못했어요. 다시 시도해 주세요.');return false;}
 }
-function toggleHighlight(start,end) {
-  const c=chapter(),version=profile.bibleVersion,key=highlightKey(c.id,version,start,end);
-  const row=BibleReading.rows(c,version).find(row=>row.start===start&&row.end===end);
-  if(!row?.text)return;
-  const existing=readingData[selectedDate]?.highlights?.[key];
-  const value=existing?null:{chapterId:c.id,version,start,end,text:row.text,note:''};
-  if(!saveHighlight(selectedDate,key,value))return;
-  render('reader','replace');
-  document.querySelector(`[data-action="highlight-verse"][data-start="${start}"]`)?.focus({preventScroll:true});
+function selectVerse(button) {
+  const row=button.closest('.verse-row'),actions=row.querySelector('.verse-record-actions'),open=actions.hidden;
+  document.querySelectorAll('.verse-record-actions').forEach(el=>el.hidden=true);
+  document.querySelectorAll('.verse-passage').forEach(el=>el.setAttribute('aria-expanded','false'));
+  document.querySelectorAll('.verse-row.is-selected').forEach(el=>el.classList.remove('is-selected'));
+  actions.hidden=!open;button.setAttribute('aria-expanded',String(open));row.classList.toggle('is-selected',open);
 }
-function bookmarkIcon() {return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4Z"/></svg>';}
+function openVerseRecord(start,end) {
+  const c=chapter(),version=profile.bibleVersion,row=BibleReading.rows(c,version).find(row=>row.start===start&&row.end===end);
+  if(!row?.text)return;
+  const key=highlightKey(c.id,version,start,end),existing=readingData[selectedDate]?.highlights?.[key];
+  highlightDraft={id:c.id,date:selectedDate,version,start,end,text:existing?.text||row.text,owner:accountStore.owner};
+  document.querySelector('#verse-record-reference').textContent=`${reference(c,start,end)} · ${BIBLE_VERSIONS[version]}`;
+  document.querySelector('#verse-record-text').textContent=highlightDraft.text;
+  document.querySelector('#verse-record-note').value=typeof existing?.note==='string'?existing.note:'';
+  document.querySelector('#verse-record-feedback').textContent='';
+  document.querySelector('#verse-record-dialog').showModal();document.body.classList.add('verse-record-open');
+}
+function clearVerseRecord() {
+  highlightDraft=null;document.querySelector('#verse-record-note').value='';document.querySelector('#verse-record-text').textContent='';
+  document.body.classList.remove('verse-record-open');
+}
+function closeVerseRecord() {document.querySelector('#verse-record-dialog').close();clearVerseRecord();}
+function commitVerseRecord() {
+  if(!highlightDraft)return;
+  const {id,date,version,start,end,text,owner}=highlightDraft;
+  if(owner!==accountStore.owner||page!=='reader'||id!==selected||date!==selectedDate||version!==profile.bibleVersion){closeVerseRecord();return;}
+  const key=highlightKey(id,version,start,end),note=document.querySelector('#verse-record-note').value.slice(0,5000);
+  if(!saveHighlight(date,key,{chapterId:id,version,start,end,text,note})){
+    document.querySelector('#verse-record-feedback').textContent='기록을 저장하지 못했어요. 다시 시도해 주세요.';return;
+  }
+  closeVerseRecord();render('reader','replace');
+  document.querySelector(`[data-action="select-verse"][data-start="${start}"]`)?.focus({preventScroll:true});
+}
+document.querySelector('#verse-record-dialog').addEventListener('cancel',clearVerseRecord);
+document.querySelector('#verse-record-dialog').addEventListener('close',()=>{if(!document.querySelector('#verse-record-dialog').open)clearVerseRecord();});
 function scriptureContent(c,start=1,end=BibleReading.count(c,profile.bibleVersion),context=false,markable=false) {
   const version=profile.bibleVersion,rows=BibleReading.rows(c,version,start,end);
   const label=row=>row.start===row.end?String(row.start):`${row.start}–${row.end}`;
@@ -418,7 +444,8 @@ function scriptureContent(c,start=1,end=BibleReading.count(c,profile.bibleVersio
   return headings+(context?rows.map(row=>`<p><sup>${label(row)}</sup> ${text(row)}</p>`).join(''):
     `<ol class="verses ${markable?'markable-verses':''}">${rows.map(row=>{
       const marked=Boolean(readingData[selectedDate]?.highlights?.[highlightKey(c.id,version,row.start,row.end)]);
-      return `<li class="verse-row ${markable&&marked?'is-highlighted':''}"><span class="verse-number" aria-hidden="true">${label(row)}</span><span class="verse-text">${text(row)}</span>${markable&&row.text!==null?`<button class="verse-bookmark" data-action="highlight-verse" data-start="${row.start}" data-end="${row.end}" aria-pressed="${marked}" aria-label="${reference(c,row.start,row.end)} 인상 깊은 말씀 표시" title="인상 깊은 말씀 표시">${bookmarkIcon()}</button>`:''}</li>`;
+      if(!markable||row.text===null)return `<li class="verse-row"><span class="verse-number" aria-hidden="true">${label(row)}</span><span class="verse-text">${text(row)}</span></li>`;
+      return `<li class="verse-row ${marked?'is-highlighted':''}"><span class="verse-number" aria-hidden="true">${label(row)}</span><button class="verse-passage" data-action="select-verse" data-start="${row.start}" data-end="${row.end}" aria-expanded="false" aria-controls="verse-actions-${row.start}"><span class="sr-only">${reference(c,row.start,row.end)} ${marked?'기록한 말씀':'말씀 선택'} </span><span class="verse-text">${text(row)}</span></button><div id="verse-actions-${row.start}" class="verse-record-actions" hidden><button class="outline-button" data-action="record-verse" data-start="${row.start}" data-end="${row.end}">${marked?'기록 수정':'기록하기'}</button></div></li>`;
     }).join('')}</ol>`);
 }
 
@@ -474,7 +501,7 @@ function journal() {
    const c=CHAPTER_BY_ID.get(value.chapterId),noteId=`highlight-note-${date}-${key}`;
    return `<article class="entry highlighted-entry"><small>${date} · ${BIBLE_VERSIONS[value.version]}</small><h2>${reference(c,value.start,value.end)}</h2><blockquote>${escapeHTML(value.text)}</blockquote><label for="${noteId}">나의 기록</label><textarea id="${noteId}" class="highlight-note" data-highlight="${key}" data-date="${date}" maxlength="5000" placeholder="인상 깊었던 이유를 남겨 보세요.">${escapeHTML(typeof value.note==='string'?value.note:'')}</textarea><button class="text-button" data-action="remove-highlight" data-highlight="${key}" data-date="${date}">표시 해제</button></article>`;
  }).join('')).join('');
- content.innerHTML=`<div class="eyebrow">MY QUIET TIME</div><h1>나의 묵종</h1><div class="mode-tabs journal-tabs" role="group" aria-label="기록 종류"><button data-action="journal-tab" data-tab="qt" aria-pressed="${journalTab==='qt'}">묵종</button><button data-action="journal-tab" data-tab="reading" aria-pressed="${journalTab==='reading'}">말씀</button></div>${journalTab==='qt'?(cards||'<div class="empty">📖<p>아직 기록이 없어요.<br>홈에서 첫 말씀을 열어 보세요.</p><button class="primary" data-page="home">말씀 읽으러 가기</button></div>'):(highlights||'<div class="empty">📖<p>표시한 말씀이 없어요.<br>말씀 읽기에서 절 옆의 책갈피를 눌러 보세요.</p></div>')}`;
+ content.innerHTML=`<div class="eyebrow">MY QUIET TIME</div><h1>나의 묵종</h1><div class="mode-tabs journal-tabs" role="group" aria-label="기록 종류"><button data-action="journal-tab" data-tab="qt" aria-pressed="${journalTab==='qt'}">묵종</button><button data-action="journal-tab" data-tab="reading" aria-pressed="${journalTab==='reading'}">말씀</button></div>${journalTab==='qt'?(cards||'<div class="empty">📖<p>아직 기록이 없어요.<br>홈에서 첫 말씀을 열어 보세요.</p><button class="primary" data-page="home">말씀 읽으러 가기</button></div>'):(highlights||'<div class="empty">📖<p>표시한 말씀이 없어요.<br>말씀 읽기에서 구절을 누른 뒤 기록해 보세요.</p></div>')}`;
 }
 function readingDates() {
   return Object.keys(readingData).filter(date=>validDay(date)&&date<=today).sort();
@@ -772,7 +799,10 @@ document.addEventListener('click',e=>{
  if(b.dataset.action==='word-reselect')render('wordSelection');
  if(b.dataset.action==='open-reading'&&ACTIVE_CHAPTER_IDS.has(b.dataset.readingId)&&validDay(b.dataset.date)&&b.dataset.date<=today){selected=b.dataset.readingId;selectedDate=b.dataset.date;render('reader');window.scrollTo({top:0,behavior:'instant'});}
  if(b.dataset.action==='read-chapter')setChapterRead(selected,selectedDate,!readChapters(selectedDate).includes(selected));
- if(b.dataset.action==='highlight-verse'&&page==='reader')toggleHighlight(Number(b.dataset.start),Number(b.dataset.end));
+ if(b.dataset.action==='select-verse'&&page==='reader')selectVerse(b);
+ if(b.dataset.action==='record-verse'&&page==='reader')openVerseRecord(Number(b.dataset.start),Number(b.dataset.end));
+ if(b.dataset.action==='save-verse-record')commitVerseRecord();
+ if(b.dataset.action==='close-verse-record')closeVerseRecord();
  if(b.dataset.action==='journal-tab'&&['qt','reading'].includes(b.dataset.tab)){journalTab=b.dataset.tab;render('journal');}
  if(b.dataset.action==='remove-highlight'&&saveHighlight(b.dataset.date,b.dataset.highlight,null))render('journal','replace');
  if(b.dataset.action==='activity-date'&&validDay(b.dataset.date)&&b.dataset.date<=today){activityDate=b.dataset.date;render('activity');document.querySelector(`.calendar-day[data-date="${activityDate}"]`).focus({preventScroll:true});}

@@ -45,7 +45,7 @@ const A='aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',B='bbbbbbbb-bbbb-4bbb-bbbb-bbbbbb
   assert.equal(await p.evaluate(id=>JSON.parse(localStorage.getItem('mock-database'))[id].payload.profile.qtBookId,A),'matthew');
   assert.equal(await p.evaluate(id=>JSON.parse(localStorage.getItem('mock-database'))[id].payload.profile.bibleVersion,A),'rnksv');
   await require('./book-choice.cjs')(p,'reading','john');await p.locator('.chapter-title').click();await p.locator('#word-chapter').selectOption('john-3');await p.locator('#word-selection [type=submit]').click();
-  await p.locator('[data-action=highlight-verse][data-start="16"]').click();await nav('journal');await p.locator('[data-action=journal-tab][data-tab=reading]').click();
+  await p.locator('[data-action=select-verse][data-start="16"]').click();await p.locator('[data-action=record-verse][data-start="16"]').click();await p.locator('#verse-record-note').fill('처음 기록');await p.locator('[data-action=save-verse-record]').click();await nav('journal');await p.locator('[data-action=journal-tab][data-tab=reading]').click();
   await p.locator('.highlight-note').fill('ACCOUNT_A_HIGHLIGHT');await p.clock.runFor(1000);await p.waitForFunction(()=>cloudAccount.status==='synced');
   assert.equal(await p.evaluate(id=>JSON.parse(localStorage.getItem('mock-database'))[id].payload.reading['2026-10-20'].highlights['john-3:rnksv:16-16'].note,A),'ACCOUNT_A_HIGHLIGHT');
   assert.equal(await p.locator('[data-tab=reading]').getAttribute('aria-pressed'),'true');await p.reload();await p.waitForFunction(()=>cloudAccount.status==='synced');assert.equal(await p.locator('.highlight-note').inputValue(),'ACCOUNT_A_HIGHLIGHT');
