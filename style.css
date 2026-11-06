@@ -165,3 +165,18 @@ html{background:var(--accent)}body{min-height:100dvh}
  .sidebar::after{content:'';position:absolute;left:0;right:0;bottom:0;height:env(safe-area-inset-bottom,0px);background:var(--accent);pointer-events:none}
  #toast{bottom:calc(85px + env(safe-area-inset-bottom,0px))}
 }
+
+/* Book selection and saved passages */
+.passage-selection select+label{margin-top:22px}
+.markable-verses .verse-row{display:grid;grid-template-columns:22px minmax(0,1fr) 40px;gap:10px;align-items:start;padding-left:10px;padding-right:6px}
+.markable-verses .verse-text{min-width:0;overflow-wrap:anywhere}
+.markable-verses .is-highlighted{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent);border-radius:6px}
+.verse-bookmark{display:grid;place-items:center;width:40px;min-height:44px;border:0;border-radius:9px;background:transparent;color:var(--muted)}
+.verse-bookmark svg{width:21px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
+.verse-bookmark[aria-pressed=true]{color:var(--accent)}
+.verse-bookmark[aria-pressed=true] svg{fill:currentColor}
+@media(hover:hover) and (pointer:fine){.verse-bookmark:hover{background:var(--accent-soft);color:var(--accent)}}
+.journal-tabs{margin:20px 0 26px}
+.highlighted-entry blockquote{margin:16px 0 24px;padding:4px 0 4px 16px;border-left:3px solid var(--accent);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text);font-size:14px;line-height:1.95}
+.highlighted-entry label{display:block;color:var(--accent);font-weight:700;font-size:13px}
+.highlighted-entry .highlight-note{margin:10px 0 4px;min-height:105px;padding:14px;font-size:13px}

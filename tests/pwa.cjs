@@ -38,7 +38,6 @@ const server=http.createServer((req,res)=>{
   const originalProfile=await p.evaluate(()=>localStorage.getItem('quolingo-profile-v1'));
   const originalReading=await p.evaluate(()=>localStorage.getItem('quolingo-reading-v1'));
   const changeSettings=async()=>{
-   await p.locator('#qt-book').selectOption('matthew');await p.locator('#reading-book').selectOption('genesis');
    await p.locator('#daily-goal').fill('3');await p.locator('#completion-rule').selectOption('both');
    await p.locator('#skip-sunday-qt').check();await p.locator('input[name=avatar][value=tas]').check();
   };
@@ -68,19 +67,19 @@ const server=http.createServer((req,res)=>{
   await cdp.send('Emulation.setSafeAreaInsetsOverride',{insets:{top:0,right:0,bottom:0,left:0}});
   await p.locator('.nav[data-page=home]').click();assert.equal(await p.evaluate(()=>document.documentElement.dataset.theme),'apricot');
   await p.locator('.nav[data-page=account]').click();assert.equal(await p.locator('input[name=theme][value=apricot]').isChecked(),true);
-  assert.equal(await p.locator('#qt-book').inputValue(),'joshua');assert.equal(await p.locator('#reading-book').inputValue(),'joshua');
+  assert.equal(await p.locator('#qt-book,#reading-book').count(),0);
   assert.equal(await p.locator('#daily-goal').inputValue(),'1');assert.equal(await p.locator('#skip-sunday-qt').isChecked(),false);
   await changeSettings();
   await p.locator('input[name=theme][value=lavender]').check();
   await p.reload();await p.locator('.nav[data-page=account]').click();assert.equal(await p.locator('input[name=theme][value=apricot]').isChecked(),true);
   assert.equal(await p.locator('#profile-name').inputValue(),'');
-  assert.equal(await p.locator('#qt-book').inputValue(),'joshua');assert.equal(await p.locator('#daily-goal').inputValue(),'1');
+  assert.equal(await p.evaluate(()=>profile.qtBookId),'joshua');assert.equal(await p.locator('#daily-goal').inputValue(),'1');
   await changeSettings();
   await p.locator('#profile-name').fill('저장한 이름');await p.locator('input[name=theme][value=lavender]').check();
   await p.locator('#account-form [type=submit]').click();
   await p.reload();await p.locator('.nav[data-page=account]').click();assert.equal(await p.locator('input[name=theme][value=lavender]').isChecked(),true);
   assert.equal(await p.locator('#profile-name').inputValue(),'저장한 이름');
-  assert.equal(await p.locator('#qt-book').inputValue(),'matthew');assert.equal(await p.locator('#reading-book').inputValue(),'genesis');
+  assert.deepEqual(await p.evaluate(()=>[profile.qtBookId,profile.readingBookId]),['joshua','joshua']);
   assert.equal(await p.locator('#daily-goal').inputValue(),'3');assert.equal(await p.locator('#completion-rule').inputValue(),'both');
   assert.equal(await p.locator('#skip-sunday-qt').isChecked(),true);assert.equal(await p.locator('input[name=avatar][value=tas]').isChecked(),true);
   assert.equal(await p.evaluate(()=>daySettings(today).dailyGoal),3);

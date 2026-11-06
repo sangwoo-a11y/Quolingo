@@ -114,3 +114,25 @@ test('guest import is explicit and does not remove the original guest records',a
  const a=account(client,store);await a.init();assert.deepEqual(store.read().chapters,{});
  await a.importGuest();assert.equal(client.row.chapters.old.note,'guest');await a.logout();assert.equal(store.read().chapters.old.note,'guest');
 });
+
+test('highlight-only guest and account records are recognized, merged and kept separate',async()=>{
+ const value={chapterId:'john-3',version:'krv',start:16,end:16,text:'A verse',note:'my note'};
+ const memory=new Memory(),store=new Q.Store(memory),key='john-3:krv:16-16';
+ store.setItem(Q.FIELDS.reading,JSON.stringify({'2026-11-06':{highlights:{[key]:value}}}));assert.equal(store.hasGuest(),true);
+ store.switchOwner(A);assert.deepEqual(store.read().reading,{});
+ const client=remoteClient(),a=account(client,store);await a.init();await a.importGuest();
+ assert.equal(client.row.reading['2026-11-06'].highlights[key].note,'my note');
+ store.switchOwner(B);assert.deepEqual(store.read().reading,{});
+});
+test('concurrent highlighted verses and notes merge without losing removals or hiding conflicts',()=>{
+ const key='john-3:krv:16-16',value={chapterId:'john-3',version:'krv',start:16,end:16,text:'A verse',note:''};
+ const base=Q.snapshot({reading:{'2026-11-06':{highlights:{[key]:value},chapters:['john-3']}}});
+ const local=structuredClone(base),remote=structuredClone(base);
+ local.reading['2026-11-06'].highlights[key].note='local note';
+ remote.reading['2026-11-06'].highlights['john-3:krv:17-17']={...value,start:17,end:17};
+ let result=Q.merge(base,local,remote);assert.equal(result.conflicts.length,0);assert.equal(Object.keys(result.value.reading['2026-11-06'].highlights).length,2);
+ delete local.reading['2026-11-06'].highlights[key];
+ result=Q.merge(base,local,remote);assert.equal(result.value.reading['2026-11-06'].highlights[key],undefined);assert.equal(result.conflicts.length,0);assert.deepEqual(result.value.reading['2026-11-06'].chapters,['john-3']);
+ remote.reading['2026-11-06'].highlights[key].note='changed remotely';
+ assert.equal(Q.merge(base,local,remote).conflicts.length,1);
+});

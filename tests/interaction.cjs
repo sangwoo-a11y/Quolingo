@@ -25,7 +25,7 @@ const url=process.env.TEST_URL||'http://127.0.0.1:8080';
   await p.clock.runFor(280);await p.locator('#chapter-select').waitFor();
   // Leaving the page during feedback must cancel its pending navigation.
   await home();await today.dispatchEvent('click');await account();await p.clock.runFor(300);
-  assert.equal(await p.locator('#qt-book').isVisible(),true);
+  assert.equal(await p.locator('#profile-name').isVisible(),true);
   await home();await today.focus();await p.keyboard.press('Enter');await p.clock.runFor(280);await p.locator('#chapter-select').waitFor();
   // Companions sit at each week's midpoint, with occasional pairs and alternating sides.
   for(const [date,count] of [['2027-02-20',4],['2026-03-20',6],['2026-10-20',5]]){
@@ -53,12 +53,11 @@ const url=process.env.TEST_URL||'http://127.0.0.1:8080';
   }
   // Preserve the old common book as both initial choices, then save them independently.
   await p.evaluate(()=>localStorage.setItem('quolingo-profile-v1',JSON.stringify({name:'기존 이름',bookId:'john'})));await p.reload();await account();
-  assert.equal(await p.locator('#qt-book').inputValue(),'john');assert.equal(await p.locator('#reading-book').inputValue(),'john');
-  await p.locator('#qt-book').selectOption('leviticus');assert.equal(await p.locator('#reading-book').inputValue(),'john');
-  await p.locator('#reading-book').selectOption('romans');assert.equal(await p.locator('#qt-book').inputValue(),'leviticus');
-  await p.locator('#account-form [type=submit]').click();
-  await p.reload();await account();assert.equal(await p.locator('#qt-book').inputValue(),'leviticus');assert.equal(await p.locator('#reading-book').inputValue(),'romans');assert.equal(await p.locator('#profile-name').inputValue(),'기존 이름');
-  await home();assert.match(await p.locator('.unit small').textContent(),/레위기/);await p.locator('[data-mode=reading]').click();assert.match(await p.locator('.unit small').textContent(),/로마서/);
+  assert.deepEqual(await p.evaluate(()=>[profile.qtBookId,profile.readingBookId]),['john','john']);
+  await require('./book-choice.cjs')(p,'qt','leviticus');assert.equal(await p.evaluate(()=>profile.readingBookId),'john');
+  await require('./book-choice.cjs')(p,'reading','romans');assert.equal(await p.evaluate(()=>profile.qtBookId),'leviticus');
+  await p.reload();await account();assert.deepEqual(await p.evaluate(()=>[profile.qtBookId,profile.readingBookId]),['leviticus','romans']);assert.equal(await p.locator('#profile-name').inputValue(),'기존 이름');
+  await home();await p.locator('[data-mode=qt]').click();assert.match(await p.locator('.unit small').textContent(),/레위기/);await p.locator('[data-mode=reading]').click();assert.match(await p.locator('.unit small').textContent(),/로마서/);
   await p.emulateMedia({reducedMotion:'reduce'});await today.click();await p.locator('#word-chapter').waitFor();
   assert.ok((await p.locator('#word-chapter option').allTextContents()).every(text=>text.startsWith('로마서')));
   assert.deepEqual(errors,[]);

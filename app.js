@@ -22,7 +22,7 @@ const BIBLE_VERSIONS = BibleReading.names;
 const fields = ['observation', 'interpretation', 'application'];
 const parts = ['관찰', '해석', '적용'];
 const content = document.querySelector('#content');
-let readingData = {}, mode = 'qt', openingDayTimer = null, heldButton = null;
+let readingData = {}, mode = 'qt', journalTab = 'qt', openingDayTimer = null, heldButton = null;
 let shareSnapshot=null,shareBusy=false,scriptureRequest=0;
 let data = {}, legacy = {}, page = 'home', stage = 0, selected = CHAPTERS[0].id;
 let rangeStart = 1, rangeEnd = CHAPTERS[0].verses.length;
@@ -75,6 +75,19 @@ function chapter() { return CHAPTER_BY_ID.get(selected)||readingChapters()[0]; }
 function chapterLabel(c) { return `${c.book} ${c.chapter}장${c.title?' · '+c.title:''}`; }
 function bookOptions(selectedBookId) {
   return [['old','구약'],['new','신약']].map(([testament,label])=>`<optgroup label="${label}">${BOOKS.filter(b=>b.testament===testament).map(b=>`<option value="${b.id}" ${b.id===selectedBookId?'selected':''}>${b.name}</option>`).join('')}</optgroup>`).join('');
+}
+function bookSelection(id) {
+  const book=BOOKS.find(b=>b.chapters.some(c=>c.id===selected));
+  return `<label for="${id}">권</label><select id="${id}" name="book">${bookOptions(book?.id)}</select>`;
+}
+function rememberSelectedBook(kind) {
+  const book=BOOKS.find(b=>b.chapters.some(c=>c.id===selected));
+  if(!book)return;
+  const key=kind==='qt'?'qtBookId':'readingBookId';
+  if(profile[key]===book.id)return;
+  const next={...profile,[key]:book.id};
+  try {accountStore.setItem(PROFILE_KEY,JSON.stringify(next));profile=next;}
+  catch {toast('선택한 권을 저장하지 못했어요.');}
 }
 function record(id = selected, date = selectedDate) { return data[date]?.[id] || {}; }
 function readVerses(id = selected, date = today) {
@@ -220,7 +233,7 @@ function updateStats() {
 let lastRoute=null;
 const routeScrolls=new Map();
 function routeState(target=page) {
-  return {page:target,mode,stage,selected,selectedDate,rangeStart,rangeEnd,activityMonth,activityDate,owner:accountStore.owner};
+  return {page:target,mode,stage,selected,selectedDate,rangeStart,rangeEnd,activityMonth,activityDate,journalTab,owner:accountStore.owner};
 }
 function routeKey(route) { return JSON.stringify(route); }
 function restoreRoute(route) {
@@ -230,6 +243,7 @@ function restoreRoute(route) {
   if(['editor','selection','success'].includes(route.page)&&!validRange(CHAPTER_BY_ID.get(route.selected),route.rangeStart,route.rangeEnd))return false;
   if(!validDay(route.activityMonth+'-01')||!validDay(route.activityDate)||route.activityDate>today)return false;
   ({mode,stage,selected,selectedDate,rangeStart,rangeEnd,activityMonth,activityDate}=route);
+  journalTab=route.journalTab==='reading'?'reading':'qt';
   return true;
 }
 function render(target=page,historyMode='auto') {
@@ -365,23 +379,52 @@ function openChapter(id, start, end, date=today, prefill=null) {
 function selection() {
   const c=chapter(),length=BibleReading.count(c,profile.bibleVersion);
   rangeStart=Math.min(rangeStart,length);rangeEnd=Math.min(Math.max(rangeStart,rangeEnd),length);
-  content.innerHTML=`<h1>${selectedDate===today?'오늘의 말씀 선택':dateLabel(selectedDate)+' 말씀 선택'}</h1><form id="passage-selection" class="passage-selection"><label for="chapter-select">말씀</label><select id="chapter-select" name="chapter">${selectionChapters().map(item=>`<option value="${item.id}" ${item.id===selected?'selected':''}>${chapterLabel(item)}</option>`).join('')}</select><div class="range-fields"><div><label for="start-verse">시작 절</label><select id="start-verse" name="start">${Array.from({length},(_,i)=>`<option value="${i+1}" ${rangeStart===i+1?'selected':''}>${i+1}절</option>`).join('')}</select></div><span aria-hidden="true">–</span><div><label for="end-verse">끝 절</label><select id="end-verse" name="end">${Array.from({length},(_,i)=>i+1).filter(n=>n>=rangeStart).map(n=>`<option value="${n}" ${rangeEnd===n?'selected':''}>${n}절</option>`).join('')}</select></div></div><div class="range-preview" aria-live="polite"><strong>${reference()}</strong><span>${selectedVerses().length}절</span></div><div class="actions"><button type="button" class="outline-button" data-page="home">이전</button><button type="submit" class="primary">다음</button></div></form>`;
+  content.innerHTML=`<h1>${selectedDate===today?'오늘의 말씀 선택':dateLabel(selectedDate)+' 말씀 선택'}</h1><form id="passage-selection" class="passage-selection">${bookSelection('qt-book-select')}<label for="chapter-select">장</label><select id="chapter-select" name="chapter">${selectionChapters().map(item=>`<option value="${item.id}" ${item.id===selected?'selected':''}>${chapterLabel(item)}</option>`).join('')}</select><div class="range-fields"><div><label for="start-verse">시작 절</label><select id="start-verse" name="start">${Array.from({length},(_,i)=>`<option value="${i+1}" ${rangeStart===i+1?'selected':''}>${i+1}절</option>`).join('')}</select></div><span aria-hidden="true">–</span><div><label for="end-verse">끝 절</label><select id="end-verse" name="end">${Array.from({length},(_,i)=>i+1).filter(n=>n>=rangeStart).map(n=>`<option value="${n}" ${rangeEnd===n?'selected':''}>${n}절</option>`).join('')}</select></div></div><div class="range-preview" aria-live="polite"><strong>${reference()}</strong><span>${selectedVerses().length}절</span></div><div class="actions"><button type="button" class="outline-button" data-page="home">이전</button><button type="submit" class="primary">다음</button></div></form>`;
 }
 function wordSelection() {
-  content.innerHTML=`<h1>${dateLabel(selectedDate)} 말씀 읽기</h1><form id="word-selection" class="passage-selection"><label for="word-chapter">말씀</label><select id="word-chapter" name="chapter">${selectionChapters().map(c=>`<option value="${c.id}" ${c.id===selected?'selected':''}>${chapterLabel(c)}${readChapters(selectedDate).includes(c.id)?' ✓':''}</option>`).join('')}</select><div class="actions"><button type="button" class="outline-button" data-page="home">이전</button><button class="primary" type="submit">다음</button></div></form>`;
+  content.innerHTML=`<h1>${dateLabel(selectedDate)} 말씀 읽기</h1><form id="word-selection" class="passage-selection">${bookSelection('word-book-select')}<label for="word-chapter">장</label><select id="word-chapter" name="chapter">${selectionChapters().map(c=>`<option value="${c.id}" ${c.id===selected?'selected':''}>${chapterLabel(c)}${readChapters(selectedDate).includes(c.id)?' ✓':''}</option>`).join('')}</select><div class="actions"><button type="button" class="outline-button" data-page="home">이전</button><button class="primary" type="submit">다음</button></div></form>`;
 }
-function scriptureContent(c,start=1,end=BibleReading.count(c,profile.bibleVersion),context=false) {
+function highlightKey(id,version,start,end) {return `${id}:${version}:${start}-${end}`;}
+function validHighlight(value,key) {
+  const c=CHAPTER_BY_ID.get(value?.chapterId);
+  return c&&ACTIVE_CHAPTER_IDS.has(c.id)&&Object.hasOwn(BIBLE_VERSIONS,value.version)&&
+    validRange(c,value.start,value.end,value.version)&&typeof value.text==='string'&&value.text.trim()&&
+    key===highlightKey(c.id,value.version,value.start,value.end);
+}
+function saveHighlight(date,key,value) {
+  if(!validDay(date)||date>today||(value&&!validHighlight(value,key)))return false;
+  const highlights={...readingData[date]?.highlights};
+  if(value)highlights[key]=value;else delete highlights[key];
+  const next={...readingData,[date]:{...readingData[date],highlights}};
+  try {accountStore.setItem(READING_KEY,JSON.stringify(next));readingData=next;return true;}
+  catch {toast('말씀 기록을 저장하지 못했어요. 다시 시도해 주세요.');return false;}
+}
+function toggleHighlight(start,end) {
+  const c=chapter(),version=profile.bibleVersion,key=highlightKey(c.id,version,start,end);
+  const row=BibleReading.rows(c,version).find(row=>row.start===start&&row.end===end);
+  if(!row?.text)return;
+  const existing=readingData[selectedDate]?.highlights?.[key];
+  const value=existing?null:{chapterId:c.id,version,start,end,text:row.text,note:''};
+  if(!saveHighlight(selectedDate,key,value))return;
+  render('reader','replace');
+  document.querySelector(`[data-action="highlight-verse"][data-start="${start}"]`)?.focus({preventScroll:true});
+}
+function bookmarkIcon() {return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4Z"/></svg>';}
+function scriptureContent(c,start=1,end=BibleReading.count(c,profile.bibleVersion),context=false,markable=false) {
   const version=profile.bibleVersion,rows=BibleReading.rows(c,version,start,end);
   const label=row=>row.start===row.end?String(row.start):`${row.start}–${row.end}`;
   const text=row=>escapeHTML(row.text===null?'(이 파일에 해당 절의 본문이 없습니다.)':row.text);
   const headings=start===1?BibleReading.headings(c,version).map(text=>`<p class="scripture-heading">${escapeHTML(text)}</p>`).join(''):'';
   return headings+(context?rows.map(row=>`<p><sup>${label(row)}</sup> ${text(row)}</p>`).join(''):
-    `<ol class="verses">${rows.map(row=>`<li class="verse-row"><span class="verse-number" aria-hidden="true">${label(row)}</span><span>${text(row)}</span></li>`).join('')}</ol>`);
+    `<ol class="verses ${markable?'markable-verses':''}">${rows.map(row=>{
+      const marked=Boolean(readingData[selectedDate]?.highlights?.[highlightKey(c.id,version,row.start,row.end)]);
+      return `<li class="verse-row ${markable&&marked?'is-highlighted':''}"><span class="verse-number" aria-hidden="true">${label(row)}</span><span class="verse-text">${text(row)}</span>${markable&&row.text!==null?`<button class="verse-bookmark" data-action="highlight-verse" data-start="${row.start}" data-end="${row.end}" aria-pressed="${marked}" aria-label="${reference(c,row.start,row.end)} 인상 깊은 말씀 표시" title="인상 깊은 말씀 표시">${bookmarkIcon()}</button>`:''}</li>`;
+    }).join('')}</ol>`);
 }
 
 function reader() {
-  const c=chapter(),done=readChapters(selectedDate).includes(selected),chapters=selectionChapters(),index=chapters.findIndex(item=>item.id===selected),previous=chapters[index-1],next=chapters[index+1];
-  content.innerHTML=`<div class="editor-head"><span>${dateLabel(selectedDate)} · 말씀 읽기</span></div><h1><button class="chapter-title" data-action="word-reselect" aria-label="${c.book} ${c.chapter}장 · 읽을 장 선택">${c.book} ${c.chapter}장</button></h1><p class="bible-version-name">${BIBLE_VERSIONS[profile.bibleVersion]}</p>${scriptureContent(c)}<button class="primary wide read-toggle" data-action="read-chapter" aria-pressed="${done}" aria-label="${c.book} ${c.chapter}장 ${done?'읽기 완료 취소':'읽기 완료'}">이 장 읽기 완료</button><div class="actions chapter-navigation"><button class="outline-button" data-action="previous-chapter" data-next="${previous?.id||''}" ${previous?'':'disabled'}>이전 장</button><button class="outline-button" data-action="next-chapter" data-next="${next?.id||''}" ${next?'':'disabled'}>다음 장</button></div>`;
+  const c=chapter(),done=readChapters(selectedDate).includes(selected),chapters=CHAPTERS,index=chapters.findIndex(item=>item.id===selected),previous=chapters[index-1],next=chapters[index+1];
+  content.innerHTML=`<div class="editor-head"><span>${dateLabel(selectedDate)} · 말씀 읽기</span></div><h1><button class="chapter-title" data-action="word-reselect" aria-label="${c.book} ${c.chapter}장 · 읽을 장 선택">${c.book} ${c.chapter}장</button></h1><p class="bible-version-name">${BIBLE_VERSIONS[profile.bibleVersion]}</p>${scriptureContent(c,1,BibleReading.count(c,profile.bibleVersion),false,true)}<button class="primary wide read-toggle" data-action="read-chapter" aria-pressed="${done}" aria-label="${c.book} ${c.chapter}장 ${done?'읽기 완료 취소':'읽기 완료'}">이 장 읽기 완료</button><div class="actions chapter-navigation"><button class="outline-button" data-action="previous-chapter" data-next="${previous?.id||''}" ${previous?'':'disabled'}>이전 장</button><button class="outline-button" data-action="next-chapter" data-next="${next?.id||''}" ${next?'':'disabled'}>다음 장</button></div>`;
 }
 function readingContext(c, r) {
   const previousField = stage === 2 ? 'observation' : stage === 3 ? 'interpretation' : null;
@@ -427,7 +470,11 @@ function deleteJournalEntry({id,date,start,end,old=false}) {
 function journal() {
  const dates=[...new Set([...Object.keys(data),...Object.keys(legacy),...Object.keys(readingData)])].filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort().reverse();
  const cards=dates.map(date=>ALL_CHAPTERS.map(c=>Object.values(record(c.id,date).sessions||{}).filter(r=>validRange(c,r.start,r.end)&&((r.read||[]).length||fields.some(f=>r[f]))).map(r=>journalCard(date,c,r)).join('')).join('')+(legacy[date]&&fields.some(f=>legacy[date][f])?journalCard(date,null,legacy[date],true):'')).join('');
- content.innerHTML=`<div class="eyebrow">MY QUIET TIME</div><h1>나의 묵종</h1><p class="intro">한 장의 말씀, 나만의 이야기.</p>${cards||'<div class="empty">📖<p>아직 기록이 없어요.<br>홈에서 첫 말씀을 열어 보세요.</p><button class="primary" data-page="home">말씀 읽으러 가기</button></div>'}`;
+ const highlights=dates.filter(date=>validDay(date)&&date<=today).map(date=>Object.entries(readingData[date]?.highlights||{}).filter(([key,value])=>validHighlight(value,key)).reverse().map(([key,value])=>{
+   const c=CHAPTER_BY_ID.get(value.chapterId),noteId=`highlight-note-${date}-${key}`;
+   return `<article class="entry highlighted-entry"><small>${date} · ${BIBLE_VERSIONS[value.version]}</small><h2>${reference(c,value.start,value.end)}</h2><blockquote>${escapeHTML(value.text)}</blockquote><label for="${noteId}">나의 기록</label><textarea id="${noteId}" class="highlight-note" data-highlight="${key}" data-date="${date}" maxlength="5000" placeholder="인상 깊었던 이유를 남겨 보세요.">${escapeHTML(typeof value.note==='string'?value.note:'')}</textarea><button class="text-button" data-action="remove-highlight" data-highlight="${key}" data-date="${date}">표시 해제</button></article>`;
+ }).join('')).join('');
+ content.innerHTML=`<div class="eyebrow">MY QUIET TIME</div><h1>나의 묵종</h1><div class="mode-tabs journal-tabs" role="group" aria-label="기록 종류"><button data-action="journal-tab" data-tab="qt" aria-pressed="${journalTab==='qt'}">묵종</button><button data-action="journal-tab" data-tab="reading" aria-pressed="${journalTab==='reading'}">말씀</button></div>${journalTab==='qt'?(cards||'<div class="empty">📖<p>아직 기록이 없어요.<br>홈에서 첫 말씀을 열어 보세요.</p><button class="primary" data-page="home">말씀 읽으러 가기</button></div>'):(highlights||'<div class="empty">📖<p>표시한 말씀이 없어요.<br>말씀 읽기에서 절 옆의 책갈피를 눌러 보세요.</p></div>')}`;
 }
 function readingDates() {
   return Object.keys(readingData).filter(date=>validDay(date)&&date<=today).sort();
@@ -514,7 +561,7 @@ function closeShare() {document.querySelector('#share-dialog').close();clearShar
 document.querySelector('#share-dialog').addEventListener('cancel',clearShare);
 document.querySelector('#share-dialog').addEventListener('close',()=>{if(!document.querySelector('#share-dialog').open)clearShare();});
 function conflictLabel(path) {
-  const labels={profile:'계정',chapters:'QT',reading:'말씀 읽기',legacyEntries:'이전 묵종',observation:'관찰',interpretation:'해석',application:'적용',completed:'완료',completedSteps:'QT 진행',name:'이름',avatar:'캐릭터',theme:'기본 색',decorations:'꾸미기',owned:'구매한 아이템',equipped:'적용한 아이템',qtBookId:'QT',readingBookId:'말씀',chapterVerseCounts:'읽은 절 수',bibleVersion:'성경 번역본',dailyGoal:'목표',completionRule:'완료 조건',skipSundayQt:'일요일 QT',rules:'완료 기준',completedRules:'달성 당시 기준',sessions:'',lastRange:'말씀 범위',start:'시작 절',end:'끝 절'};
+  const labels={profile:'계정',chapters:'QT',reading:'말씀 읽기',legacyEntries:'이전 묵종',observation:'관찰',interpretation:'해석',application:'적용',completed:'완료',completedSteps:'QT 진행',name:'이름',avatar:'캐릭터',theme:'기본 색',decorations:'꾸미기',owned:'구매한 아이템',equipped:'적용한 아이템',qtBookId:'QT',readingBookId:'말씀',highlights:'인상 깊은 말씀',note:'나의 기록',text:'본문',chapterId:'장',version:'번역본',chapterVerseCounts:'읽은 절 수',bibleVersion:'성경 번역본',dailyGoal:'목표',completionRule:'완료 조건',skipSundayQt:'일요일 QT',rules:'완료 기준',completedRules:'달성 당시 기준',sessions:'',lastRange:'말씀 범위',start:'시작 절',end:'끝 절'};
   return path.map(key=>labels[key]??(CHAPTER_BY_ID.has(key)?`${CHAPTER_BY_ID.get(key).book} ${CHAPTER_BY_ID.get(key).chapter}장`:key)).filter(Boolean).join(' · ');
 }
 function cloudAccountHTML() {
@@ -541,6 +588,7 @@ async function startCloudAccount() {
   let first=true;
   cloudAccount=new QuolingoCloud.Account({client,store:accountStore,
     onScope:()=>{
+      journalTab='qt';
       if(document.querySelector('#share-dialog').open)closeShare();
       loadAccountRecords();lastRoute=null;
       const restored=first?history.state?.quolingo:null;first=false;
@@ -549,7 +597,7 @@ async function startCloudAccount() {
       render(target,'replace');document.body.classList.remove('cloud-booting');document.querySelector('#cloud-boot').hidden=true;
     },
     onData:()=>{
-      const focused=document.activeElement?.id,position=focused==='reflection'?[document.activeElement.selectionStart,document.activeElement.selectionEnd]:null,top=scrollY;
+      const focused=document.activeElement?.id,position=document.activeElement?.matches('textarea')?[document.activeElement.selectionStart,document.activeElement.selectionEnd]:null,top=scrollY;
       loadAccountRecords();render(page,'replace');
       const input=focused&&document.getElementById(focused);if(input){input.focus({preventScroll:true});if(position)input.setSelectionRange(...position);}
       window.scrollTo({top,behavior:'instant'});
@@ -638,7 +686,7 @@ function equipShopItem(id) {
 }
 
 function account() {
-  content.innerHTML=`<h1>계정</h1><section id="cloud-account" class="card cloud-account" aria-label="로그인과 동기화">${cloudAccountHTML()}</section><section class="profile-summary"><span class="profile-avatar" aria-hidden="true">${avatarFace(profile.avatar)}</span><div><h2>${escapeHTML(profile.name||'나의 프로필')}</h2><p>${cloudAccount?.user?'계정에 저장되는 프로필':'이 브라우저에 저장되는 프로필'}</p></div></section><form id="account-form" class="account-form"><label for="profile-name">이름</label><input id="profile-name" name="name" type="text" maxlength="20" required autocomplete="nickname" value="${escapeHTML(profile.name)}"><label for="bible-version">성경 번역본</label><select id="bible-version" name="bibleVersion">${Object.entries(BIBLE_VERSIONS).map(([id,name])=>`<option value="${id}" ${profile.bibleVersion===id?'selected':''}>${name}</option>`).join('')}</select><label for="qt-book">QT</label><select id="qt-book" name="qtBook">${bookOptions(profile.qtBookId)}</select><label for="reading-book">말씀</label><select id="reading-book" name="readingBook">${bookOptions(profile.readingBookId)}</select><label for="daily-goal">매일 말씀 읽기 목표 (장)</label><input id="daily-goal" name="dailyGoal" type="number" min="1" max="1189" step="1" required value="${profile.dailyGoal}"><label for="completion-rule">완료 조건</label><select id="completion-rule" name="completionRule">${[['both','QT와 말씀 목표 모두'],['qt','QT만'],['reading','말씀 목표만']].map(([value,label])=>`<option value="${value}" ${profile.completionRule===value?'selected':''}>${label}</option>`).join('')}</select><label class="toggle-setting" for="skip-sunday-qt"><span>일요일 QT 끄기</span><input id="skip-sunday-qt" name="skipSundayQt" type="checkbox" ${profile.skipSundayQt?'checked':''}></label><fieldset><legend>기본 색</legend><div class="theme-options">${Object.entries(THEMES).map(([key,value])=>`<label class="theme-option"><input type="radio" name="theme" value="${key}" ${profile.theme===key?'checked':''}><span><i style="--swatch:${value.color}" aria-hidden="true"></i>${value.name}</span></label>`).join('')}</div></fieldset><fieldset><legend>프로필 캐릭터</legend><div class="avatar-options">${Object.entries(AVATARS).map(([key,value])=>`<label class="avatar-option"><input type="radio" name="avatar" value="${key}" ${profile.avatar===key?'checked':''}><span>${avatarFace(key)}${value.name}</span></label>`).join('')}</div></fieldset><button type="submit" class="primary wide">저장</button></form><section id="install-app" class="card install-app" aria-label="앱 설치와 바로가기">${QuolingoInstall.html()}</section><a class="source-note" href="THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">성경 본문 출처 · 번역본 안내</a>`;
+  content.innerHTML=`<h1>계정</h1><section id="cloud-account" class="card cloud-account" aria-label="로그인과 동기화">${cloudAccountHTML()}</section><section class="profile-summary"><span class="profile-avatar" aria-hidden="true">${avatarFace(profile.avatar)}</span><div><h2>${escapeHTML(profile.name||'나의 프로필')}</h2><p>${cloudAccount?.user?'계정에 저장되는 프로필':'이 브라우저에 저장되는 프로필'}</p></div></section><form id="account-form" class="account-form"><label for="profile-name">이름</label><input id="profile-name" name="name" type="text" maxlength="20" required autocomplete="nickname" value="${escapeHTML(profile.name)}"><label for="bible-version">성경 번역본</label><select id="bible-version" name="bibleVersion">${Object.entries(BIBLE_VERSIONS).map(([id,name])=>`<option value="${id}" ${profile.bibleVersion===id?'selected':''}>${name}</option>`).join('')}</select><label for="daily-goal">매일 말씀 읽기 목표 (장)</label><input id="daily-goal" name="dailyGoal" type="number" min="1" max="1189" step="1" required value="${profile.dailyGoal}"><label for="completion-rule">완료 조건</label><select id="completion-rule" name="completionRule">${[['both','QT와 말씀 목표 모두'],['qt','QT만'],['reading','말씀 목표만']].map(([value,label])=>`<option value="${value}" ${profile.completionRule===value?'selected':''}>${label}</option>`).join('')}</select><label class="toggle-setting" for="skip-sunday-qt"><span>일요일 QT 끄기</span><input id="skip-sunday-qt" name="skipSundayQt" type="checkbox" ${profile.skipSundayQt?'checked':''}></label><fieldset><legend>기본 색</legend><div class="theme-options">${Object.entries(THEMES).map(([key,value])=>`<label class="theme-option"><input type="radio" name="theme" value="${key}" ${profile.theme===key?'checked':''}><span><i style="--swatch:${value.color}" aria-hidden="true"></i>${value.name}</span></label>`).join('')}</div></fieldset><fieldset><legend>프로필 캐릭터</legend><div class="avatar-options">${Object.entries(AVATARS).map(([key,value])=>`<label class="avatar-option"><input type="radio" name="avatar" value="${key}" ${profile.avatar===key?'checked':''}><span>${avatarFace(key)}${value.name}</span></label>`).join('')}</div></fieldset><button type="submit" class="primary wide">저장</button></form><section id="install-app" class="card install-app" aria-label="앱 설치와 바로가기">${QuolingoInstall.html()}</section><a class="source-note" href="THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">성경 본문 출처 · 번역본 안내</a>`;
 }
 document.addEventListener('change',e=>{
   const id=e.target.id;
@@ -646,6 +694,11 @@ document.addEventListener('change',e=>{
     const theme=e.target.value;if(!Object.hasOwn(THEMES,theme))return;
     applyTheme(theme);
     return;
+  }
+  if(['qt-book-select','word-book-select'].includes(id)){
+    const book=BOOKS.find(book=>book.id===e.target.value);if(!book)return;
+    selected=book.chapters[0].id;rangeStart=1;rangeEnd=BibleReading.count(chapter(),profile.bibleVersion);
+    render(id==='qt-book-select'?'selection':'wordSelection','replace');document.getElementById(id).focus();return;
   }
   if(id==='word-chapter'){selected=e.target.value;history.replaceState({quolingo:routeState(),scroll:scrollY},'');lastRoute=routeState();return;}
   if(!['chapter-select','start-verse','end-verse'].includes(id))return;
@@ -660,19 +713,26 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('submit',e=>{
   if(e.target.id==='account-form'){
-    e.preventDefault();const values=new FormData(e.target),name=String(values.get('name')||'').trim(),avatar=String(values.get('avatar')||''),theme=String(values.get('theme')||''),qtBookId=String(values.get('qtBook')||''),readingBookId=String(values.get('readingBook')||''),bibleVersion=String(values.get('bibleVersion')||'');
-    if(!name||name.length>20||!Object.hasOwn(AVATARS,avatar)||!Object.hasOwn(THEMES,theme)||!validBookId(qtBookId)||!validBookId(readingBookId)||!Object.hasOwn(BIBLE_VERSIONS,bibleVersion))return;
-    const nextProfile={...profile,name,avatar,theme,qtBookId,readingBookId,bibleVersion,...DailyProgress.settings({dailyGoal:Number(values.get('dailyGoal')),completionRule:values.get('completionRule'),skipSundayQt:values.get('skipSundayQt')==='on'})};
+    e.preventDefault();const values=new FormData(e.target),name=String(values.get('name')||'').trim(),avatar=String(values.get('avatar')||''),theme=String(values.get('theme')||''),bibleVersion=String(values.get('bibleVersion')||'');
+    if(!name||name.length>20||!Object.hasOwn(AVATARS,avatar)||!Object.hasOwn(THEMES,theme)||!Object.hasOwn(BIBLE_VERSIONS,bibleVersion))return;
+    const nextProfile={...profile,name,avatar,theme,bibleVersion,...DailyProgress.settings({dailyGoal:Number(values.get('dailyGoal')),completionRule:values.get('completionRule'),skipSundayQt:values.get('skipSundayQt')==='on'})};
     try{commitProfile(nextProfile);render('account');toast('프로필을 저장했어요.');}
     catch{toast('프로필을 저장할 수 없어요. 브라우저 저장 공간을 확인해 주세요.');}
     return;
   }
-  if(e.target.id==='word-selection'){e.preventDefault();render('reader');window.scrollTo({top:0,behavior:'instant'});return;}
+  if(e.target.id==='word-selection'){e.preventDefault();rememberSelectedBook('reading');render('reader');window.scrollTo({top:0,behavior:'instant'});return;}
   if(e.target.id!=='passage-selection')return;
   e.preventDefault();if(!validRange(chapter(),rangeStart,rangeEnd))return;
-  stage=0;render('editor');window.scrollTo({top:0,behavior:'instant'});
+  rememberSelectedBook('qt');stage=0;render('editor');window.scrollTo({top:0,behavior:'instant'});
 });
-document.addEventListener('input',e=>{if(e.target.id!=='reflection')return;updateRecord({[fields[stage-1]]:e.target.value});document.querySelector('#next').disabled=!e.target.value.trim();});
+document.addEventListener('input',e=>{
+  if(e.target.matches('.highlight-note')) {
+    const {date,highlight:key}=e.target.dataset,value=readingData[date]?.highlights?.[key];
+    if(value)saveHighlight(date,key,{...value,note:e.target.value.slice(0,5000)});
+    return;
+  }
+  if(e.target.id!=='reflection')return;updateRecord({[fields[stage-1]]:e.target.value});document.querySelector('#next').disabled=!e.target.value.trim();
+});
 function releaseHeldButton() {
   heldButton?.classList.remove('is-held');heldButton=null;
 }
@@ -712,13 +772,16 @@ document.addEventListener('click',e=>{
  if(b.dataset.action==='word-reselect')render('wordSelection');
  if(b.dataset.action==='open-reading'&&ACTIVE_CHAPTER_IDS.has(b.dataset.readingId)&&validDay(b.dataset.date)&&b.dataset.date<=today){selected=b.dataset.readingId;selectedDate=b.dataset.date;render('reader');window.scrollTo({top:0,behavior:'instant'});}
  if(b.dataset.action==='read-chapter')setChapterRead(selected,selectedDate,!readChapters(selectedDate).includes(selected));
+ if(b.dataset.action==='highlight-verse'&&page==='reader')toggleHighlight(Number(b.dataset.start),Number(b.dataset.end));
+ if(b.dataset.action==='journal-tab'&&['qt','reading'].includes(b.dataset.tab)){journalTab=b.dataset.tab;render('journal');}
+ if(b.dataset.action==='remove-highlight'&&saveHighlight(b.dataset.date,b.dataset.highlight,null))render('journal','replace');
  if(b.dataset.action==='activity-date'&&validDay(b.dataset.date)&&b.dataset.date<=today){activityDate=b.dataset.date;render('activity');document.querySelector(`.calendar-day[data-date="${activityDate}"]`).focus({preventScroll:true});}
  if(b.dataset.action==='activity-month'){
    const date=new Date(activityMonth+'-01T12:00:00+09:00');date.setUTCMonth(date.getUTCMonth()+Number(b.dataset.shift));
    const month=dayKey(date).slice(0,7);
    if(month<=today.slice(0,7)){activityMonth=month;activityDate=month===today.slice(0,7)?today:month+'-01';render('activity');document.querySelector(`[data-action="activity-month"][data-shift="${b.dataset.shift}"]`).focus({preventScroll:true});}
  }
- if(['next-chapter','previous-chapter'].includes(b.dataset.action)&&selectionChapters().some(c=>c.id===b.dataset.next)){selected=b.dataset.next;render('reader');window.scrollTo({top:0,behavior:'instant'});}
+ if(['next-chapter','previous-chapter'].includes(b.dataset.action)&&ACTIVE_CHAPTER_IDS.has(b.dataset.next)){selected=b.dataset.next;rememberSelectedBook('reading');render('reader');window.scrollTo({top:0,behavior:'instant'});}
  if(b.dataset.action==='open-day'){
    if(openingDayTimer!==null)return;
    if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)openDay(b.dataset.date);

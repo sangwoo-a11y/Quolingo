@@ -65,7 +65,7 @@
     meta(){return this.owner?this.parse('quolingo-sync:'+this.owner):{};}
     saveMeta(value){this.storage.setItem('quolingo-sync:'+this.owner,JSON.stringify(value));}
     backup(value){this.storage.setItem('quolingo-conflict:'+this.owner,JSON.stringify({savedAt:new Date().toISOString(),...value}));}
-    hasGuest(){const value=this.read(null);return ['chapters','reading','legacyEntries'].some(key=>Object.keys(value[key]).some(date=>key!=='reading'||(value.reading[date].chapters||[]).length));}
+    hasGuest(){const value=this.read(null);return ['chapters','reading','legacyEntries'].some(key=>Object.keys(value[key]).some(date=>key!=='reading'||((value.reading[date].chapters||[]).length||Object.keys(value.reading[date].highlights||{}).length)));}
   }
   class Account {
     constructor({client,store,onScope=()=>{},onData=()=>{},onStatus=()=>{},delay=800}){
@@ -133,7 +133,7 @@
     async importGuest(){
       if(!this.user||this.busy||!this.store.hasGuest())return;
       const guest=this.store.read(null),local=this.store.read();
-      const hasRecords=Object.keys(local.chapters).length||Object.keys(local.legacyEntries).length||Object.values(local.reading).some(day=>(day.chapters||[]).length);
+      const hasRecords=Object.keys(local.chapters).length||Object.keys(local.legacyEntries).length||Object.values(local.reading).some(day=>((day.chapters||[]).length||Object.keys(day.highlights||{}).length));
       const result=hasRecords?merge(empty(),guest,local):{value:guest,conflicts:[]};
       if(result.conflicts.length){this.importing=true;this.conflicts=result.conflicts;this.emit('conflict');return;}
       try{this.store.write(result.value);this.onData();await this.sync();}catch{this.emit('error');}

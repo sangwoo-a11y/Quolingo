@@ -58,10 +58,10 @@ const url=process.env.TEST_URL||'http://127.0.0.1:8080';
   await p.goForward();await p.waitForFunction(()=>page==='activity');await back('reader');
   // Choosing another chapter replaces selection state; back restores that chosen chapter.
   await p.locator('.chapter-title').tap();await p.locator('#word-chapter').selectOption('joshua-1');
-  await p.locator('#word-selection [type=submit]').tap();assert.equal(await p.locator('[data-action=previous-chapter]').isDisabled(),true);
+  await p.locator('#word-selection [type=submit]').tap();assert.equal(await p.locator('[data-action=previous-chapter]').getAttribute('data-next'),'deuteronomy-34');
   await back('wordSelection');assert.equal(await p.locator('#word-chapter').inputValue(),'joshua-1');
   await p.locator('#word-chapter').selectOption('joshua-24');await p.locator('#word-selection [type=submit]').tap();
-  assert.equal(await p.locator('[data-action=next-chapter]').isDisabled(),true);await total(27);
+  assert.equal(await p.locator('[data-action=next-chapter]').getAttribute('data-next'),'judges-1');await total(27);
   // Each confirmed QT stage adds one quarter, regardless of selected chapter length.
   await nav('home');await mode('qt');await openDay();
   await p.locator('#chapter-select').selectOption('joshua-6');await p.locator('#end-verse').selectOption('2');

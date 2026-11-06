@@ -44,7 +44,7 @@ const url=process.env.TEST_URL||'http://127.0.0.1:8080';
    delete data[today];data['2026-10-27']={'joshua-8':{lastRange:{start:999,end:999},sessions:{'8-10':{start:8,end:10,completed:true,observation:'saved'},'999-999':{start:999,end:999,completed:true}}}};
    accountStore.setItem(KEY,JSON.stringify(data));render('home');
   });await open('2026-10-28');await selection('joshua-8',8,10,'2026-10-28');
-  await nav('account');await p.locator('#qt-book').selectOption('luke');await p.locator('#account-form [type=submit]').tap();await nav('home');await open('2026-10-28');await selection('luke-1',1,80,'2026-10-28');
+  await require('./book-choice.cjs')(p,'qt','luke','2026-10-28');await nav('home');await open('2026-10-28');await selection('luke-1',1,80,'2026-10-28');
   assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.deepEqual(errors,[]);
   console.log('PASS: recent historical QT range prefills only, selected-book/date isolation, no journal/reward copying, reload, current-day drafts, missing/invalid range metadata and first-chapter fallback.');
  }finally{await browser.close();}
