@@ -594,10 +594,11 @@ function conflictLabel(path) {
 function cloudAccountHTML() {
   const a=cloudAccount;
   if(!a?.client)return '<h2>로그인</h2><p>구글 계정으로 기록을 저장하고 다른 기기에서 이어 볼 수 있어요.</p><button type="button" class="outline-button wide" disabled>구글로 로그인</button><p class="cloud-note">로그인은 연결 설정 후 이용할 수 있어요. 현재 기록은 이 기기에 저장됩니다.</p>';
-  const messages={guest:'현재 기록은 이 기기에 저장됩니다.',loading:'계정 기록을 불러오는 중이에요.',syncing:'계정에 저장하는 중이에요.',pending:'이 기기에 저장했어요. 동기화를 기다리고 있어요.',synced:'계정에 저장했어요.',error:'기기에 저장된 기록을 유지하고 있어요. 연결되면 자동으로 다시 저장합니다.','auth-error':'로그인 요청을 완료하지 못했어요. 다시 시도해 주세요.',conflict:'같은 기록이 서로 다르게 수정됐어요. 아래 내용을 비교하고 저장할 내용을 선택해 주세요.'};
-  if(!a.user)return `<h2>로그인</h2><p>구글 계정으로 기록을 저장하고 다른 기기에서 이어 볼 수 있어요.</p><button type="button" class="primary wide" data-action="cloud-login">구글로 로그인</button><p class="cloud-note" role="status">${messages[a.status]||messages.guest}</p>`;
+  const messages={guest:'현재 기록은 이 기기에 저장됩니다.',loading:'계정 기록을 불러오는 중이에요.',syncing:'계정에 저장하는 중이에요.',pending:'이 기기에 저장했어요. 동기화를 기다리고 있어요.',synced:'계정에 저장했어요.',error:'기기에 저장된 기록을 유지하고 있어요. 연결되면 자동으로 다시 저장합니다.','auth-error':'로그인 요청을 완료하지 못했어요. 다시 시도해 주세요.','session-error':'로그인 연결을 확인하지 못했어요. 저장된 기록은 유지됩니다. 연결을 다시 확인해 주세요.',conflict:'같은 기록이 서로 다르게 수정됐어요. 아래 내용을 비교하고 저장할 내용을 선택해 주세요.'};
+  const retry=a.status==='session-error'?'<button type="button" class="outline-button wide" data-action="cloud-reconnect">로그인 다시 확인</button>':'';
+  if(!a.user)return `<h2>로그인</h2><p>구글 계정으로 기록을 저장하고 다른 기기에서 이어 볼 수 있어요.</p><button type="button" class="primary wide" data-action="cloud-login">구글로 로그인</button><p class="cloud-note" role="status">${messages[a.status]||messages.guest}</p>${retry}`;
   const conflict=a.conflicts.length?`<details class="sync-conflicts" open><summary>다르게 수정된 항목 ${a.conflicts.length}개</summary>${a.conflicts.map(c=>`<section><h3>${escapeHTML(conflictLabel(c.path))}</h3><label>이 기기${a.importing?'의 기존 기록':''}<textarea readonly>${escapeHTML(typeof c.local==='string'?c.local:JSON.stringify(c.local)??'내용 없음')}</textarea></label><label>${a.importing?'계정':'다른 기기'}<textarea readonly>${escapeHTML(typeof c.remote==='string'?c.remote:JSON.stringify(c.remote)??'내용 없음')}</textarea></label></section>`).join('')}<div class="sync-actions"><button type="button" class="outline-button" data-action="cloud-local">이 기기 내용 사용</button><button type="button" class="outline-button" data-action="cloud-remote">${a.importing?'계정':'다른 기기'} 내용 사용</button></div></details>`:'';
-  return `<h2>로그인한 계정</h2><p class="cloud-identity">${escapeHTML(a.user.email||'구글 계정')}</p><p class="cloud-status" role="status">${messages[a.status]||messages.pending}</p>${conflict}<div class="sync-actions"><button type="button" class="text-button" data-action="cloud-logout">로그아웃</button></div>`;
+  return `<h2>로그인한 계정</h2><p class="cloud-identity">${escapeHTML(a.user.email||'구글 계정')}</p><p class="cloud-status" role="status">${messages[a.status]||messages.pending}</p>${retry}${conflict}<div class="sync-actions"><button type="button" class="text-button" data-action="cloud-logout">로그아웃</button></div>`;
 }
 function updateCloudAccountUI() {
   const section=document.querySelector('#cloud-account');if(section)section.innerHTML=cloudAccountHTML();
@@ -611,7 +612,9 @@ function loadAccountRecords() {
 }
 async function startCloudAccount() {
   const config=QuolingoCloud.config(window.QUOLINGO_SUPABASE);
-  const client=config&&window.supabase?window.supabase.createClient(config.url,config.key,{auth:{flowType:'pkce',persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
+  let client=null;
+  try{client=config&&window.supabase?window.supabase.createClient(config.url,config.key,{auth:{flowType:'pkce',persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;}
+  catch{toast('로그인 연결을 시작하지 못했어요. 기기에 저장된 기록으로 열었어요.');}
   let first=true;
   cloudAccount=new QuolingoCloud.Account({client,store:accountStore,
     onScope:()=>{
@@ -628,11 +631,11 @@ async function startCloudAccount() {
       loadAccountRecords();render(page,'replace');
       const input=focused&&document.getElementById(focused);if(input){input.focus({preventScroll:true});if(position)input.setSelectionRange(...position);}
       window.scrollTo({top,behavior:'instant'});
-    },onStatus:updateCloudAccountUI});
+    },onStatus:account=>{updateCloudAccountUI();if(account.status==='session-error')toast('로그인 연결을 확인하지 못했어요. 저장된 기록은 유지됩니다.');}});
   if(client){document.body.classList.add('cloud-booting');document.querySelector('#cloud-boot').hidden=false;}
   await cloudAccount.init();
   if(client){
-    window.addEventListener('online',()=>{void cloudAccount.sync();});
+    window.addEventListener('online',()=>{void (cloudAccount.status==='session-error'?cloudAccount.init():cloudAccount.sync());});
     document.addEventListener('visibilitychange',()=>{if(!document.hidden)void cloudAccount.sync();});
     setInterval(()=>{if(!document.hidden&&cloudAccount.status!=='conflict')void cloudAccount.sync();},30000);
   }
@@ -780,6 +783,7 @@ document.addEventListener('click',e=>{
  const logo=e.target.closest('a.logo,a.mobile-logo');
  if(logo){e.preventDefault();render('home');window.scrollTo({top:0,behavior:'instant'});return;}
  const b=e.target.closest('button');if(!b||b.disabled)return;
+ if(b.dataset.action==='cloud-reconnect')void cloudAccount.init();
  if(b.dataset.action==='cloud-login')void cloudAccount.login(location.origin+location.pathname);
  if(b.dataset.action==='cloud-logout')void cloudAccount.logout();
  if(b.dataset.action==='cloud-local')void cloudAccount.resolve('local');

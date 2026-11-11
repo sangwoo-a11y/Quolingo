@@ -68,16 +68,36 @@
     hasGuest(){const value=this.read(null);return ['chapters','reading','legacyEntries'].some(key=>Object.keys(value[key]).some(date=>key!=='reading'||((value.reading[date].chapters||[]).length||Object.keys(value.reading[date].highlights||{}).length)));}
   }
   class Account {
-    constructor({client,store,onScope=()=>{},onData=()=>{},onStatus=()=>{},delay=800}){
-      Object.assign(this,{client,store,onScope,onData,onStatus,delay});this.user=null;this.epoch=0;this.ready=false;this.status='guest';this.conflicts=[];this.busy=null;this.timer=null;this.scope=undefined;this.again=false;this.importing=null;
+    constructor({client,store,onScope=()=>{},onData=()=>{},onStatus=()=>{},delay=800,sessionTimeout=10000}){
+      Object.assign(this,{client,store,onScope,onData,onStatus,delay,sessionTimeout});this.user=null;this.epoch=0;this.ready=false;this.status='guest';this.conflicts=[];this.busy=null;this.timer=null;this.scope=undefined;this.again=false;this.importing=null;this.initRequest=0;this.subscribed=false;
       store.onChange=()=>this.changed();
     }
     emit(status){this.status=status;this.onStatus(this);}
     async init(){
       if(!this.client){this.ready=true;this.scope=null;this.onScope(null);this.emit('unconfigured');return;}
-      this.client.auth.onAuthStateChange((_event,session)=>{setTimeout(()=>{void this.session(session).catch(()=>this.emit('error'));},0);});
-      try{const {data,error}=await this.client.auth.getSession();if(error)throw error;await this.session(data.session);}
-      catch{this.ready=true;this.store.switchOwner(null);this.scope=null;this.onScope(null);this.emit('error');}
+      const request=++this.initRequest,epoch=this.epoch;
+      let timer;
+      try{
+        if(!this.subscribed){
+          this.client.auth.onAuthStateChange((_event,session)=>{setTimeout(()=>{void this.session(session).catch(()=>this.emit('error'));},0);});
+          this.subscribed=true;
+        }
+        const result=await Promise.race([
+          this.client.auth.getSession(),
+          new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Session confirmation timed out')),this.sessionTimeout);})
+        ]);
+        // An auth event or newer retry owns the session once it has arrived.
+        if(request!==this.initRequest||epoch!==this.epoch)return;
+        if(result.error)throw result.error;
+        await this.session(result.data.session);
+        if(this.status==='session-error'){if(this.user)await this.sync();else this.emit('guest');}
+      }catch{
+        if(request!==this.initRequest||epoch!==this.epoch)return;
+        // Do not guess an account from cached tokens or import guest records.
+        // Existing verified account caches remain selected during a failed retry.
+        if(this.scope===undefined){this.ready=true;this.store.switchOwner(null);this.scope=null;this.onScope(null);}
+        this.emit('session-error');
+      }finally{clearTimeout(timer);}
     }
     async session(session){
       const user=session?.user||null,id=user?.id||null;
