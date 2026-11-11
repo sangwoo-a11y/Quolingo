@@ -2,6 +2,8 @@
 
 뮤니, 코, 타스와 함께하는 말씀 읽기와 QT. 빌드 없이 GitHub Pages에서 실행하는 정적 웹사이트입니다.
 
+홈페이지: [Quolingo](https://sangwoo-a11y.github.io/Quolingo/)
+
 ## 실행과 검증
 
 ```sh
@@ -102,7 +104,7 @@ QT 날짜 버튼을 누르면 해당 날짜의 작성 중인 범위를 먼저 �
 
 ## GitHub Pages 배포
 
-Settings → Pages → Source를 **GitHub Actions**로 설정합니다. `main`에 푸시하면 `.github/workflows/pages.yml`이 본문 파일과 화면 파일을 함께 배포합니다. 상대 경로이므로 프로젝트 페이지 주소에서도 실행합니다.
+Settings → Pages → Source를 **GitHub Actions**로 설정합니다. 저장소 이름이 `Quolingo`이므로 홈페이지 주소는 `https://sangwoo-a11y.github.io/Quolingo/`입니다. 저장소 이름을 바꾼 뒤에는 기존 `/Quolingo.github.io/` 주소 대신 새 주소를 사용합니다. Supabase의 Site URL과 Redirect URLs에도 새 주소를 등록해야 로그인 후 정상적으로 돌아옵니다. 설치 앱이나 바로가기가 이전 주소를 열면 새 주소에서 바로가기를 다시 만듭니다. 브라우저 데이터를 삭제할 필요는 없습니다. `main`에 푸시하면 `.github/workflows/pages.yml`이 본문 파일과 화면 파일을 함께 배포합니다. 상대 경로이므로 프로젝트 페이지 주소에서도 실행합니다.
 
 Actions가 `waiting for github-pages deployment approval`이라고 표시하면 환경 승인이 필요한 상태입니다. 저장소 업로드만으로 사이트 갱신이 완료되는 것은 아니며, 해당 실행의 환경 승인 후 배포 성공 여부를 확인해야 합니다.
 

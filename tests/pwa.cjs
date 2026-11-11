@@ -3,7 +3,7 @@
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
-const root=path.resolve(__dirname,'..'),prefix='/Quolingo.github.io/';
+const root=path.resolve(__dirname,'..'),prefix=process.env.TEST_PREFIX||'/Quolingo/';
 let cssSuffix='';
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.webmanifest':'application/manifest+json'};
 const server=http.createServer((req,res)=>{

@@ -25,10 +25,10 @@ Supabase의 **Authentication → URL Configuration**에 다음 주소를 등록�
 **Site URL**:
 
 ```text
-https://sangwoo-a11y.github.io/Quolingo.github.io/
+https://sangwoo-a11y.github.io/Quolingo/
 ```
 
-**Redirect URLs**에도 같은 주소를 추가합니다. `/Quolingo.github.io/` 경로와 마지막 `/`까지 포함합니다.
+**Redirect URLs**에도 같은 주소를 추가합니다. `/Quolingo/` 경로와 마지막 `/`까지 포함합니다.
 
 로컬 개발용 주소가 필요하면 `http://127.0.0.1:8080/`도 Redirect URLs에 별도로 추가합니다.
 
